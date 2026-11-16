@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import type { Exercise, Workout } from "./types";
 import * as api from "./api";
 
 vi.mock("./api", () => ({
+  getHealth: vi.fn(),
+  getInitialData: vi.fn(),
   getExercises: vi.fn(),
   getWorkouts: vi.fn(),
   createWorkout: vi.fn(),
@@ -17,8 +20,22 @@ const sampleExercises: Exercise[] = [
   { id: 2, name: "Running", muscle_group: "Full Body", equipment: null as any, type: "cardio" },
 ];
 
+// Fresh QueryClient per render so cached initial data never leaks between tests
+function renderApp() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  );
+}
+
 describe("App", () => {
   beforeEach(() => {
+    (api.getHealth as any).mockResolvedValue({ status: "ok" });
+    (api.getInitialData as any).mockResolvedValue({ exercises: sampleExercises, workouts: [] as Workout[] });
     (api.getExercises as any).mockResolvedValue(sampleExercises);
     (api.getWorkouts as any).mockResolvedValue([] as Workout[]);
     (api.createWorkout as any).mockResolvedValue({ id: 1, name: "", items: [] });
@@ -26,7 +43,7 @@ describe("App", () => {
   });
 
   it("renders and shows initial exercises", async () => {
-    render(<App />);
+    renderApp();
 
     // Title
     expect(await screen.findByText(/Workout Builder/i)).toBeInTheDocument();
@@ -37,12 +54,10 @@ describe("App", () => {
   });
 
   it("adds an exercise, validates missing name, then saves and shows in list", async () => {
-    // First getWorkouts (on mount) returns [] then after save returns one workout
-    (api.getWorkouts as any)
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ id: 1, name: "Leg Day", items: [{ exercise_id: 1, sets: 3, reps: 10 }] }] as Workout[]);
+    // Initial data (on mount) has no workouts; the refresh after save returns one workout
+    (api.getWorkouts as any).mockResolvedValueOnce([{ id: 1, name: "Leg Day", items: [{ exercise_id: 1, sets: 3, reps: 10 }] }] as Workout[]);
 
-    render(<App />);
+    renderApp();
 
     // Add an exercise
     const addButtons = await screen.findAllByRole("button", { name: /Add/i });
