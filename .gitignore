@@ -1,2 +1,14 @@
 .env
 !.env.example
+
+# Python virtual environment
+.venv/
+
+# Python bytecode cache
+__pycache__/
+
+# Node dependencies
+node_modules/
+
+# Dev server pid files
+*.pid
